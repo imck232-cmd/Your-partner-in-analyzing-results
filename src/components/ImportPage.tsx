@@ -26,6 +26,7 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
       .replace(/ة/g, 'ه')
       .replace(/ى/g, 'ي')
       .replace(/[\u064B-\u065F]/g, '') // Remove Harakat (Tashkeel)
+      .replace(/[\u0640]/g, '') // Remove Tatweel (Kashida)
       .replace(/[^\u0621-\u064A0-9a-zA-Z]/g, '') // Remove everything except Arabic letters and numbers
       .replace(/\s+/g, '') // Remove all spaces for better matching
       .trim()
@@ -90,7 +91,7 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
             const normalized = normalizeArabic(key);
             const metadataPatterns = [
               'studentid', 'رقم', 'id', 'رقمجلوس', 'كود', 'code',
-              'studentname', 'اسم', 'الاسم', 'name', 'الطالب', 'الطالبه',
+              'studentname', 'اسم', 'الاسم', 'name', 'الطالب', 'الطالبه', 'تلميذ', 'تلميذه',
               'gradelevel', 'الصف', 'grade', 'المستوى',
               'classsection', 'الشعبه', 'الفصل', 'section', 'class', 'مجموعه',
               'term', 'الفصل الدراسي', 'الترم', 'فصل',
@@ -115,7 +116,7 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
             });
             const studentNameKey = Object.keys(row).find(k => {
               const nk = normalizeArabic(k);
-              return nk.includes('اسم') || nk.includes('الاسم') || nk.includes('name') || nk.includes('طالب') || nk.includes('طالبه');
+              return nk.includes('اسم') || nk.includes('الاسم') || nk.includes('name') || nk.includes('طالب') || nk.includes('طالبه') || nk.includes('تلميذ');
             });
             
             const studentId = String(studentIdKey ? row[studentIdKey] : `S${index}`).trim();
@@ -176,7 +177,7 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
             };
 
             const idKey = findKey(['رقم', 'id', 'رقمجلوس', 'كود', 'رقمطالب']);
-            const nameKey = findKey(['اسم', 'الاسم', 'name', 'طالب', 'طالبه']);
+            const nameKey = findKey(['اسم', 'الاسم', 'name', 'طالب', 'طالبه', 'تلميذ']);
             const subjectKey = findKey(['الماده', 'subject', 'المواد', 'ماده']);
             const scoreKey = findKey(['الدرجه', 'score', 'النتيجه', 'درجه', 'الدرجات']);
             const maxScoreKey = findKey(['العظمى', 'maxscore', 'نهايه', 'عظمى']);

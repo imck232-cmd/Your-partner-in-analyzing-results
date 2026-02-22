@@ -53,6 +53,28 @@ export default function PageHeader({ title, description, data, pageId }: PageHea
             clonedElement.style.height = 'auto';
             clonedElement.style.overflow = 'visible';
             clonedElement.style.padding = '20px';
+            
+            // Force standard color space for all elements in the clone to avoid oklab/oklch issues
+            const allElements = clonedElement.querySelectorAll('*');
+            allElements.forEach(el => {
+              const htmlEl = el as HTMLElement;
+              const style = window.getComputedStyle(htmlEl);
+              
+              // Helper to check if a color string contains okl
+              const isOkl = (color: string) => color && (color.includes('okl') || color.includes('lab'));
+              
+              if (isOkl(style.color)) htmlEl.style.color = '#ffffff';
+              if (isOkl(style.backgroundColor)) htmlEl.style.backgroundColor = '#0f172a';
+              if (isOkl(style.borderColor)) htmlEl.style.borderColor = 'rgba(255,255,255,0.1)';
+              if (isOkl(style.fill)) htmlEl.style.fill = '#8b5cf6';
+              if (isOkl(style.stroke)) htmlEl.style.stroke = '#8b5cf6';
+              
+              // Remove backdrop-filter as it can cause issues and often uses oklch internally
+              if (style.backdropFilter && style.backdropFilter !== 'none') {
+                htmlEl.style.backdropFilter = 'none';
+                htmlEl.style.backgroundColor = 'rgba(30, 41, 59, 0.8)'; // Fallback for glass effect
+              }
+            });
           }
         }
       });

@@ -30,7 +30,7 @@ export default function WelcomePage({ onStart }: WelcomePageProps) {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="text-4xl md:text-6xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white via-white to-slate-500"
+          className="text-4xl md:text-6xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white via-white to-slate-500"
         >
           رفيقك في تحليل النتائج
         </motion.h1>
