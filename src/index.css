@@ -1,13 +1,29 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@100;200;300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@200;300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-tajawal: "IBM Plex Sans Arabic", "Tahoma", "Arial", sans-serif;
+  --font-tajawal: "Cairo", "Tahoma", "Arial", sans-serif;
   --color-brand-dark: #0f172a;
   --color-brand-medium: #1e293b;
   --color-brand-light: #334155;
   --color-accent-purple: #8b5cf6;
   --color-accent-blue: #3b82f6;
+}
+
+@layer base {
+  * {
+    @apply border-white/5;
+    font-family: var(--font-tajawal);
+  }
+  
+  body {
+    @apply bg-brand-dark text-slate-200 antialiased;
+    font-family: var(--font-tajawal);
+  }
+
+  input, button, select, textarea {
+    font-family: var(--font-tajawal) !important;
+  }
 }
 
 @layer base {

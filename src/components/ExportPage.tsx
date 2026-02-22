@@ -25,31 +25,43 @@ export default function ExportPage({ data }: ExportPageProps) {
   const exportToExcel = () => {
     const wb = XLSX.utils.book_new();
     
-    // Sheet 1: Summary
+    // Sheet 1: Summary & Dashboard KPIs
+    const totalStudents = new Set(data.map(d => d.student_id)).size;
+    const totalSubjects = new Set(data.map(d => d.subject_name)).size;
+    const avgScore = studentSummaries.reduce((a, b) => a + b.avg, 0) / studentSummaries.length;
+    const successRate = (studentSummaries.filter(s => s.avg >= 50).length / studentSummaries.length) * 100;
+    const excellenceRate = (studentSummaries.filter(s => s.avg >= 90).length / studentSummaries.length) * 100;
+
     const summaryData = [
-      ['تقرير تحليل النتائج'],
+      ['تقرير تحليل النتائج الشامل'],
       ['إعداد: رفيقك في تحليل النتائج - إبراهيم دخان'],
       ['التاريخ', new Date().toLocaleDateString()],
       [''],
+      ['لوحة التحكم - المؤشرات الرئيسية'],
       ['المؤشر', 'القيمة'],
-      ['إجمالي الطلاب', new Set(data.map(d => d.student_id)).size],
-      ['إجمالي المواد', new Set(data.map(d => d.subject_name)).size],
-      ['المتوسط العام', (studentSummaries.reduce((a, b) => a + b.avg, 0) / studentSummaries.length).toFixed(2) + '%'],
+      ['إجمالي الطلاب', totalStudents],
+      ['إجمالي المواد', totalSubjects],
+      ['المتوسط العام للمدرسة', avgScore.toFixed(2) + '%'],
+      ['نسبة النجاح العامة', successRate.toFixed(2) + '%'],
+      ['نسبة التفوق العامة', excellenceRate.toFixed(2) + '%'],
+      ['عدد الطلاب المتعثرين', studentSummaries.filter(s => s.avg < 50).length],
     ];
     const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(wb, wsSummary, "الملخص العام");
+    XLSX.utils.book_append_sheet(wb, wsSummary, "الملخص ولوحة التحكم");
 
-    // Sheet 2: Student Analysis
+    // Sheet 2: Student Analysis & Recommendations
     const studentData = studentSummaries.map(s => ({
+      'الترتيب': s.rank,
       'رقم الطالب': s.student_id,
       'اسم الطالب': s.student_name,
       'المعدل': s.avg.toFixed(2) + '%',
-      'الترتيب': s.rank,
       'التصنيف': s.category,
-      'التوصية': s.recommendation
+      'التوصية التربوية': s.recommendation,
+      'المجموع': s.totalScore,
+      'النهاية العظمى': s.maxPossible
     }));
     const wsStudents = XLSX.utils.json_to_sheet(studentData);
-    XLSX.utils.book_append_sheet(wb, wsStudents, "تحليل الطلاب");
+    XLSX.utils.book_append_sheet(wb, wsStudents, "تحليل الطلاب والتوصيات");
 
     // Sheet 3: Subject Analysis
     const subjectData = Object.values(subjectStats).map((s: any) => ({
@@ -57,12 +69,33 @@ export default function ExportPage({ data }: ExportPageProps) {
       'المتوسط': s.avg.toFixed(2) + '%',
       'نسبة النجاح': s.passRate.toFixed(2) + '%',
       'نسبة التفوق': s.excellenceRate.toFixed(2) + '%',
-      'عدد الطلاب': s.count
+      'عدد الطلاب المختبرين': s.count,
+      'الوسيط': s.median.toFixed(2),
+      'أعلى درجة': s.max,
+      'أقل درجة': s.min,
+      'الانحراف المعياري': s.stdDev.toFixed(2)
     }));
     const wsSubjects = XLSX.utils.json_to_sheet(subjectData);
-    XLSX.utils.book_append_sheet(wb, wsSubjects, "تحليل المواد");
+    XLSX.utils.book_append_sheet(wb, wsSubjects, "تحليل المواد التفصيلي");
 
-    XLSX.writeFile(wb, "تقرير_تحليل_النتائج_الشامل.xlsx");
+    // Sheet 4: Raw Data
+    const wsRaw = XLSX.utils.json_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, wsRaw, "البيانات الخام");
+
+    // Sheet 5: Charts Data (Distribution)
+    const distData = [
+      ['توزيع المستويات'],
+      ['المستوى', 'العدد'],
+      ['متميز (90-100)', studentSummaries.filter(s => s.avg >= 90).length],
+      ['جيد جداً (75-89)', studentSummaries.filter(s => s.avg >= 75 && s.avg < 90).length],
+      ['جيد (60-74)', studentSummaries.filter(s => s.avg >= 60 && s.avg < 75).length],
+      ['مقبول (50-59)', studentSummaries.filter(s => s.avg >= 50 && s.avg < 60).length],
+      ['ضعيف (أقل من 50)', studentSummaries.filter(s => s.avg < 50).length],
+    ];
+    const wsCharts = XLSX.utils.aoa_to_sheet(distData);
+    XLSX.utils.book_append_sheet(wb, wsCharts, "بيانات الرسوم البيانية");
+
+    XLSX.writeFile(wb, `تقرير_تحليل_النتائج_الشامل_${new Date().toLocaleDateString()}.xlsx`);
   };
 
   const exportToPDF = async () => {
@@ -107,12 +140,56 @@ export default function ExportPage({ data }: ExportPageProps) {
 🏆 الترتيب: ${student.rank}
 🎯 التصنيف: ${student.category}
 
-💡 *التوصية:*
+💡 *التوصية التربوية:*
 ${student.recommendation}
+
+📊 *تحليل المواد:*
+${Object.entries(student.subjectScores).map(([sub, score]) => `• ${sub}: ${(score as number).toFixed(1)}%`).join('\n')}
 
 📞 للاستفسار: 967780804012
     `);
     return `https://wa.me/?text=${message}`;
+  };
+
+  const shareGeneralSummary = () => {
+    const totalStudents = new Set(data.map(d => d.student_id)).size;
+    const totalSubjects = new Set(data.map(d => d.subject_name)).size;
+    const avgScore = (studentSummaries.reduce((a, b) => a + b.avg, 0) / studentSummaries.length).toFixed(1);
+    
+    const excellenceCount = studentSummaries.filter(s => s.avg >= 90).length;
+    const goodCount = studentSummaries.filter(s => s.avg >= 75 && s.avg < 90).length;
+    const averageCount = studentSummaries.filter(s => s.avg >= 60 && s.avg < 75).length;
+    const atRiskCount = studentSummaries.filter(s => s.avg < 50).length;
+
+    const topSubject = (Object.values(subjectStats) as any[]).sort((a: any, b: any) => b.avg - a.avg)[0];
+
+    const message = encodeURIComponent(`
+📊 *ملخص لوحة التحكم والأداء العام*
+👥 عدد الطلاب: ${totalStudents}
+📚 عدد المواد: ${totalSubjects}
+📈 المتوسط العام: ${avgScore}%
+
+📈 *تحليل المستويات:*
+⭐ متميز (90+): ${excellenceCount}
+✅ جيد جداً (75-89): ${goodCount}
+🆗 جيد (60-74): ${averageCount}
+⚠️ بحاجة دعم (أقل من 50): ${atRiskCount}
+
+📚 *أفضل مادة أداءً:*
+${topSubject ? `${topSubject.subject_name} (بمتوسط ${topSubject.avg.toFixed(1)}%)` : 'لا يوجد بيانات'}
+
+📋 *أوائل الطلاب:*
+${studentSummaries.slice(0, 5).map(s => `${s.rank}. ${s.student_name} (${s.avg.toFixed(1)}%)`).join('\n')}
+
+💡 *التوصيات والتحليلات:*
+${atRiskCount > totalStudents * 0.2 
+  ? '• يُلاحظ وجود فجوة في الأداء لبعض الطلاب، يُنصح بخطة علاجية فورية.' 
+  : '• الأداء العام ممتاز، يُنصح بالتركيز على مهارات التفكير العليا.'}
+• المادة الأكثر احتياجاً للدعم هي تلك التي تقل نسبة نجاحها عن 70%.
+
+تم التصدير من رفيقك في تحليل النتائج 🚀
+    `);
+    window.open(`https://wa.me/?text=${message}`, '_blank');
   };
 
   const [tableTitle, setTableTitle] = useState('مشاركة سريعة للطلاب (أعلى 10)');
@@ -167,6 +244,13 @@ ${student.recommendation}
             <h3 className="text-xl font-bold">مشاركة عبر واتساب</h3>
             <p className="text-sm text-slate-400">إنشاء رسائل مخصصة للطلاب وأولياء الأمور تحتوي على ملخص النتائج</p>
           </div>
+          <button 
+            onClick={shareGeneralSummary}
+            className="w-full py-3 bg-accent-purple hover:bg-accent-purple/90 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
+          >
+            <Share2 className="w-5 h-5" />
+            مشاركة الملخص العام
+          </button>
           <div className="w-full p-4 bg-white/5 rounded-xl text-xs text-slate-400 text-right">
             <p className="font-bold mb-2 text-white">مثال للرسالة:</p>
             <p>📊 تقرير أداء الطالب: أحمد...</p>
