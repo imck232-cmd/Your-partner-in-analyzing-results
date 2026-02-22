@@ -38,7 +38,24 @@ import PageHeader from './components/PageHeader';
 export default function App() {
   const [activePage, setActivePage] = useState<PageType>('welcome');
   const [data, setData] = useState<StudentRecord[]>([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth <= 768;
+      setIsMobile(mobile);
+      if (!mobile) setIsSidebarOpen(true);
+      else setIsSidebarOpen(false);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const handlePageChange = (page: PageType) => {
+    setActivePage(page);
+    if (isMobile) setIsSidebarOpen(false);
+  };
 
   const getPageInfo = () => {
     switch (activePage) {
@@ -68,7 +85,7 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-brand-dark flex overflow-hidden">
+    <div className="min-h-screen bg-brand-dark flex overflow-hidden relative">
       {/* Background Effects */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-accent-purple/10 blur-[120px] rounded-full" />
@@ -76,14 +93,32 @@ export default function App() {
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-5" />
       </div>
 
+      {/* Mobile Overlay */}
+      <AnimatePresence>
+        {isMobile && isSidebarOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarOpen(false)}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30"
+          />
+        )}
+      </AnimatePresence>
+
       {/* Sidebar */}
       <motion.aside 
         initial={false}
-        animate={{ width: isSidebarOpen ? 280 : 80 }}
-        className="relative z-20 glass-card m-4 border-white/5 flex flex-col transition-all duration-300"
+        animate={{ 
+          width: isSidebarOpen ? (isMobile ? '85%' : 280) : (isMobile ? 0 : 80),
+          x: isMobile && !isSidebarOpen ? '100%' : 0
+        }}
+        className={`fixed md:relative z-40 glass-card m-0 md:m-4 border-white/5 flex flex-col transition-all duration-300 h-full md:h-[calc(100vh-2rem)] ${
+          isMobile ? 'right-0 top-0 rounded-none' : ''
+        }`}
       >
         <div className="p-6 flex items-center justify-between">
-          {isSidebarOpen && (
+          {(isSidebarOpen || !isMobile) && (
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -95,19 +130,29 @@ export default function App() {
               <span className="font-bold text-lg tracking-tight">رفيقك</span>
             </motion.div>
           )}
-          <button 
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-          >
-            {isSidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
+          {!isMobile && (
+            <button 
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+            >
+              {isSidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          )}
+          {isMobile && isSidebarOpen && (
+            <button 
+              onClick={() => setIsSidebarOpen(false)}
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          )}
         </div>
 
-        <nav className="flex-1 px-4 py-4 space-y-2">
+        <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
           {menuItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActivePage(item.id as PageType)}
+              onClick={() => handlePageChange(item.id as PageType)}
               className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-300 group ${
                 activePage === item.id 
                 ? 'bg-accent-purple text-white shadow-lg shadow-accent-purple/20' 
@@ -115,7 +160,7 @@ export default function App() {
               }`}
             >
               <item.icon className={`w-5 h-5 ${activePage === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'}`} />
-              {isSidebarOpen && <span className="font-medium">{item.label}</span>}
+              {(isSidebarOpen || isMobile) && <span className="font-medium">{item.label}</span>}
             </button>
           ))}
         </nav>
@@ -134,34 +179,49 @@ export default function App() {
       </motion.aside>
 
       {/* Main Content */}
-      <main className="flex-1 relative z-10 overflow-y-auto p-8">
+      <main className="flex-1 relative z-10 overflow-y-auto p-4 md:p-8">
         <div className="max-w-7xl mx-auto">
-          <PageHeader 
-            title={pageInfo.title} 
-            description={pageInfo.desc} 
-            data={data} 
-            pageId={activePage} 
-          />
-          
-          <div id="main-content">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activePage}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
-              >
-                {activePage === 'welcome' && <WelcomePage onStart={() => setActivePage('import')} />}
-                {activePage === 'import' && <ImportPage onDataLoaded={(d) => { setData(d); setActivePage('dashboard'); }} />}
-                {activePage === 'dashboard' && <DashboardPage data={data} />}
-                {activePage === 'quality' && <QualityPage data={data} />}
-                {activePage === 'school_analysis' && <SchoolAnalysisPage data={data} />}
-                {activePage === 'subject_analysis' && <SubjectAnalysisPage data={data} />}
-                {activePage === 'student_analysis' && <StudentAnalysisPage data={data} />}
-                {activePage === 'export' && <ExportPage data={data} />}
-              </motion.div>
-            </AnimatePresence>
+          <div className="flex items-center gap-4 mb-6 md:hidden">
+            <button 
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-3 glass-card text-white"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <div className="flex items-center gap-2">
+              <TrendingUp className="text-accent-purple w-6 h-6" />
+              <span className="font-bold text-lg">رفيقك</span>
+            </div>
+          </div>
+
+          <div id="export-container">
+            <PageHeader 
+              title={pageInfo.title} 
+              description={pageInfo.desc} 
+              data={data} 
+              pageId={activePage} 
+            />
+            
+            <div id="main-content">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activePage}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.4, ease: "easeOut" }}
+                >
+                  {activePage === 'welcome' && <WelcomePage onStart={() => setActivePage('import')} />}
+                  {activePage === 'import' && <ImportPage onDataLoaded={(d) => { setData(d); setActivePage('dashboard'); }} />}
+                  {activePage === 'dashboard' && <DashboardPage data={data} />}
+                  {activePage === 'quality' && <QualityPage data={data} />}
+                  {activePage === 'school_analysis' && <SchoolAnalysisPage data={data} />}
+                  {activePage === 'subject_analysis' && <SubjectAnalysisPage data={data} />}
+                  {activePage === 'student_analysis' && <StudentAnalysisPage data={data} />}
+                  {activePage === 'export' && <ExportPage data={data} />}
+                </motion.div>
+              </AnimatePresence>
+            </div>
           </div>
         </div>
       </main>

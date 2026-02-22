@@ -66,17 +66,26 @@ export default function ExportPage({ data }: ExportPageProps) {
   };
 
   const exportToPDF = async () => {
-    const element = document.getElementById('main-content');
+    const element = document.getElementById('export-container');
     if (!element) return;
     
     try {
+      // Temporarily hide export buttons/actions for the screenshot
+      const actions = element.querySelectorAll('button, .export-actions');
+      actions.forEach(a => (a as HTMLElement).style.visibility = 'hidden');
+
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#0f172a'
+        backgroundColor: '#0f172a',
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight
       });
       
+      // Restore actions
+      actions.forEach(a => (a as HTMLElement).style.visibility = 'visible');
+
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
         orientation: 'landscape',
@@ -85,7 +94,7 @@ export default function ExportPage({ data }: ExportPageProps) {
       });
       
       pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-      pdf.save("تقرير_تحليل_النتائج_الشامل.pdf");
+      pdf.save(`تقرير_تحليل_النتائج_الشامل_${new Date().toLocaleDateString()}.pdf`);
     } catch (error) {
       console.error('PDF Export Error:', error);
     }

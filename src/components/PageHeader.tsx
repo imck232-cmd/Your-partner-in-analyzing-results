@@ -21,17 +21,26 @@ export default function PageHeader({ title, description, data, pageId }: PageHea
   };
 
   const exportToPDF = async () => {
-    const element = document.getElementById('main-content');
+    const element = document.getElementById('export-container');
     if (!element) return;
     
     try {
+      // Temporarily hide export buttons for the screenshot
+      const buttons = element.querySelectorAll('.export-buttons');
+      buttons.forEach(b => (b as HTMLElement).style.display = 'none');
+
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#0f172a' // Match background color
+        backgroundColor: '#0f172a',
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight
       });
       
+      // Restore buttons
+      buttons.forEach(b => (b as HTMLElement).style.display = 'flex');
+
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
         orientation: 'landscape',
@@ -40,25 +49,30 @@ export default function PageHeader({ title, description, data, pageId }: PageHea
       });
       
       pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-      pdf.save(`${title}.pdf`);
+      pdf.save(`${title}_${new Date().toLocaleDateString()}.pdf`);
     } catch (error) {
       console.error('PDF Export Error:', error);
     }
   };
 
   const shareToWhatsApp = () => {
-    const text = `تقرير: ${title}\n${description}\nتم التصدير من رفيقك في تحليل النتائج`;
+    let summary = '';
+    if (data && Array.isArray(data)) {
+      const studentCount = new Set(data.map(d => d.student_id)).size;
+      summary = `\nعدد الطلاب: ${studentCount}\nعدد المواد: ${new Set(data.map(d => d.subject_name)).size}`;
+    }
+    const text = `📊 تقرير: ${title}\n📝 ${description}${summary}\n\nتم التصدير من رفيقك في تحليل النتائج 🚀`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   return (
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
       <div>
-        <h2 className="text-3xl font-bold text-white">{title}</h2>
-        <p className="text-slate-400">{description}</p>
+        <h2 className="text-2xl md:text-3xl font-bold text-white">{title}</h2>
+        <p className="text-slate-400 text-sm md:text-base">{description}</p>
       </div>
       
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 export-buttons">
         <button 
           onClick={exportToExcel}
           className="glass-button flex items-center gap-2 text-emerald-400 border-emerald-400/30 px-4 py-2"
