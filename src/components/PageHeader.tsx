@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileSpreadsheet, FileText, Share2, Download } from 'lucide-react';
+import { FileSpreadsheet, FileText, Share2, Download, Image as ImageIcon } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -99,6 +99,48 @@ export default function PageHeader({ title, description, data, pageId }: PageHea
     }
   };
 
+  const exportToImage = async () => {
+    const element = document.getElementById('export-container');
+    if (!element) return;
+    
+    const loadingToast = document.createElement('div');
+    loadingToast.innerHTML = `
+      <div style="position: fixed; top: 20px; right: 20px; background: #3b82f6; color: white; padding: 12px 24px; border-radius: 12px; z-index: 9999; font-weight: bold; box-shadow: 0 10px 25px rgba(0,0,0,0.3); display: flex; items-center; gap: 10px; direction: rtl;">
+        <span>جاري تجهيز الصورة...</span>
+      </div>
+    `;
+    document.body.appendChild(loadingToast);
+
+    try {
+      const buttons = element.querySelectorAll('.export-buttons');
+      buttons.forEach(b => (b as HTMLElement).style.visibility = 'hidden');
+
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#0f172a',
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
+      });
+      
+      buttons.forEach(b => (b as HTMLElement).style.visibility = 'visible');
+
+      const imgData = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = imgData;
+      link.download = `${title}_${new Date().toLocaleDateString()}.png`;
+      link.click();
+    } catch (error) {
+      console.error('Image Export Error:', error);
+      alert('حدث خطأ أثناء تصدير الصورة.');
+    } finally {
+      document.body.removeChild(loadingToast);
+    }
+  };
+
   const shareToWhatsApp = () => {
     let summary = '';
     if (data && Array.isArray(data)) {
@@ -133,6 +175,15 @@ export default function PageHeader({ title, description, data, pageId }: PageHea
         >
           <FileText className="w-5 h-5" />
           <span className="hidden sm:inline">تقرير مرئي (PDF)</span>
+        </button>
+
+        <button 
+          onClick={exportToImage}
+          className="glass-button flex items-center gap-2 text-blue-400 border-blue-400/30 px-4 py-2"
+          title="تصدير صورة"
+        >
+          <ImageIcon className="w-5 h-5" />
+          <span className="hidden sm:inline">صورة (PNG)</span>
         </button>
         
         <button 

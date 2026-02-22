@@ -7,7 +7,8 @@ import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { 
   FileDown, FileSpreadsheet, FileText, MessageSquare, 
-  Share2, Download, CheckCircle2, Phone, ExternalLink 
+  Share2, Download, CheckCircle2, Phone, ExternalLink,
+  Image as ImageIcon
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -102,10 +103,20 @@ export default function ExportPage({ data }: ExportPageProps) {
     const element = document.getElementById('export-container');
     if (!element) return;
     
+    const loadingToast = document.createElement('div');
+    loadingToast.innerHTML = `
+      <div style="position: fixed; top: 20px; right: 20px; background: #8b5cf6; color: white; padding: 12px 24px; border-radius: 12px; z-index: 9999; font-weight: bold; box-shadow: 0 10px 25px rgba(0,0,0,0.3); display: flex; items-center; gap: 10px; direction: rtl;">
+        <span>جاري تجهيز التقرير المرئي...</span>
+      </div>
+    `;
+    document.body.appendChild(loadingToast);
+
     try {
       // Temporarily hide export buttons/actions for the screenshot
-      const actions = element.querySelectorAll('button, .export-actions');
+      const actions = element.querySelectorAll('button, .export-buttons');
       actions.forEach(a => (a as HTMLElement).style.visibility = 'hidden');
+
+      await new Promise(resolve => setTimeout(resolve, 800));
 
       const canvas = await html2canvas(element, {
         scale: 2,
@@ -113,7 +124,31 @@ export default function ExportPage({ data }: ExportPageProps) {
         logging: false,
         backgroundColor: '#0f172a',
         windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight
+        windowHeight: element.scrollHeight,
+        onclone: (clonedDoc) => {
+          const clonedElement = clonedDoc.getElementById('export-container');
+          if (clonedElement) {
+            clonedElement.style.height = 'auto';
+            clonedElement.style.overflow = 'visible';
+            clonedElement.style.padding = '20px';
+            
+            const allElements = clonedElement.querySelectorAll('*');
+            allElements.forEach(el => {
+              const htmlEl = el as HTMLElement;
+              const style = window.getComputedStyle(htmlEl);
+              const isOkl = (color: string) => color && (color.includes('okl') || color.includes('lab'));
+              if (isOkl(style.color)) htmlEl.style.color = '#ffffff';
+              if (isOkl(style.backgroundColor)) htmlEl.style.backgroundColor = '#0f172a';
+              if (isOkl(style.borderColor)) htmlEl.style.borderColor = 'rgba(255,255,255,0.1)';
+              if (isOkl(style.fill)) htmlEl.style.fill = '#8b5cf6';
+              if (isOkl(style.stroke)) htmlEl.style.stroke = '#8b5cf6';
+              if (style.backdropFilter && style.backdropFilter !== 'none') {
+                htmlEl.style.backdropFilter = 'none';
+                htmlEl.style.backgroundColor = 'rgba(30, 41, 59, 0.8)';
+              }
+            });
+          }
+        }
       });
       
       // Restore actions
@@ -130,6 +165,75 @@ export default function ExportPage({ data }: ExportPageProps) {
       pdf.save(`تقرير_تحليل_النتائج_الشامل_${new Date().toLocaleDateString()}.pdf`);
     } catch (error) {
       console.error('PDF Export Error:', error);
+      alert('حدث خطأ أثناء تصدير التقرير.');
+    } finally {
+      document.body.removeChild(loadingToast);
+    }
+  };
+
+  const exportToImage = async () => {
+    const element = document.getElementById('export-container');
+    if (!element) return;
+    
+    const loadingToast = document.createElement('div');
+    loadingToast.innerHTML = `
+      <div style="position: fixed; top: 20px; right: 20px; background: #3b82f6; color: white; padding: 12px 24px; border-radius: 12px; z-index: 9999; font-weight: bold; box-shadow: 0 10px 25px rgba(0,0,0,0.3); display: flex; items-center; gap: 10px; direction: rtl;">
+        <span>جاري تجهيز الصورة...</span>
+      </div>
+    `;
+    document.body.appendChild(loadingToast);
+
+    try {
+      const actions = element.querySelectorAll('button, .export-buttons');
+      actions.forEach(a => (a as HTMLElement).style.visibility = 'hidden');
+
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#0f172a',
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
+        onclone: (clonedDoc) => {
+          const clonedElement = clonedDoc.getElementById('export-container');
+          if (clonedElement) {
+            clonedElement.style.height = 'auto';
+            clonedElement.style.overflow = 'visible';
+            clonedElement.style.padding = '20px';
+            
+            const allElements = clonedElement.querySelectorAll('*');
+            allElements.forEach(el => {
+              const htmlEl = el as HTMLElement;
+              const style = window.getComputedStyle(htmlEl);
+              const isOkl = (color: string) => color && (color.includes('okl') || color.includes('lab'));
+              if (isOkl(style.color)) htmlEl.style.color = '#ffffff';
+              if (isOkl(style.backgroundColor)) htmlEl.style.backgroundColor = '#0f172a';
+              if (isOkl(style.borderColor)) htmlEl.style.borderColor = 'rgba(255,255,255,0.1)';
+              if (isOkl(style.fill)) htmlEl.style.fill = '#8b5cf6';
+              if (isOkl(style.stroke)) htmlEl.style.stroke = '#8b5cf6';
+              if (style.backdropFilter && style.backdropFilter !== 'none') {
+                htmlEl.style.backdropFilter = 'none';
+                htmlEl.style.backgroundColor = 'rgba(30, 41, 59, 0.8)';
+              }
+            });
+          }
+        }
+      });
+      
+      actions.forEach(a => (a as HTMLElement).style.visibility = 'visible');
+
+      const imgData = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = imgData;
+      link.download = `تقرير_رفيقك_${new Date().toLocaleDateString()}.png`;
+      link.click();
+    } catch (error) {
+      console.error('Image Export Error:', error);
+      alert('حدث خطأ أثناء تصدير الصورة.');
+    } finally {
+      document.body.removeChild(loadingToast);
     }
   };
 
@@ -198,65 +302,77 @@ ${atRiskCount > totalStudents * 0.2
 
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Excel Export */}
-        <div className="glass-card p-8 flex flex-col items-center text-center space-y-6 group hover:bg-emerald-500/5 transition-colors">
-          <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
-            <FileSpreadsheet className="w-10 h-10 text-emerald-400" />
+        <div className="glass-card p-6 flex flex-col items-center text-center space-y-4 group hover:bg-emerald-500/5 transition-colors">
+          <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+            <FileSpreadsheet className="w-8 h-8 text-emerald-400" />
           </div>
-          <div className="space-y-2">
-            <h3 className="text-xl font-bold">تصدير Excel شامل</h3>
-            <p className="text-sm text-slate-400">ملف إكسل احترافي يحتوي على جميع التحليلات والإحصائيات في أوراق منفصلة</p>
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold">تصدير Excel</h3>
+            <p className="text-xs text-slate-400">ملف إكسل شامل بجميع التحليلات</p>
           </div>
           <button 
             onClick={exportToExcel}
-            className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
+            className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-sm"
           >
-            <Download className="w-5 h-5" />
+            <Download className="w-4 h-4" />
             تصدير الآن
           </button>
         </div>
 
         {/* PDF Export */}
-        <div className="glass-card p-8 flex flex-col items-center text-center space-y-6 group hover:bg-red-500/5 transition-colors">
-          <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
-            <FileText className="w-10 h-10 text-red-400" />
+        <div className="glass-card p-6 flex flex-col items-center text-center space-y-4 group hover:bg-red-500/5 transition-colors">
+          <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+            <FileText className="w-8 h-8 text-red-400" />
           </div>
-          <div className="space-y-2">
-            <h3 className="text-xl font-bold">تصدير تقرير مرئي (PDF)</h3>
-            <p className="text-sm text-slate-400">تقرير مطبوع يحتوي على كافة الرسوم البيانية، المنحنيات، والتحليلات كما تظهر في البرنامج</p>
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold">تقرير PDF</h3>
+            <p className="text-xs text-slate-400">تقرير مرئي مطبوع وشامل</p>
           </div>
           <button 
             onClick={exportToPDF}
-            className="w-full py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
+            className="w-full py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-sm"
           >
-            <Download className="w-5 h-5" />
-            تصدير التقرير المرئي
+            <Download className="w-4 h-4" />
+            تصدير PDF
+          </button>
+        </div>
+
+        {/* Image Export */}
+        <div className="glass-card p-6 flex flex-col items-center text-center space-y-4 group hover:bg-blue-500/5 transition-colors">
+          <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+            <ImageIcon className="w-8 h-8 text-blue-400" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold">تصدير صورة</h3>
+            <p className="text-xs text-slate-400">حفظ التقرير كصورة PNG</p>
+          </div>
+          <button 
+            onClick={exportToImage}
+            className="w-full py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-sm"
+          >
+            <Download className="w-4 h-4" />
+            تصدير صورة
           </button>
         </div>
 
         {/* WhatsApp Export */}
-        <div className="glass-card p-8 flex flex-col items-center text-center space-y-6 group hover:bg-accent-purple/5 transition-colors">
-          <div className="w-20 h-20 bg-accent-purple/10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
-            <MessageSquare className="w-10 h-10 text-accent-purple" />
+        <div className="glass-card p-6 flex flex-col items-center text-center space-y-4 group hover:bg-accent-purple/5 transition-colors">
+          <div className="w-16 h-16 bg-accent-purple/10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+            <MessageSquare className="w-8 h-8 text-accent-purple" />
           </div>
-          <div className="space-y-2">
-            <h3 className="text-xl font-bold">مشاركة عبر واتساب</h3>
-            <p className="text-sm text-slate-400">إنشاء رسائل مخصصة للطلاب وأولياء الأمور تحتوي على ملخص النتائج</p>
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold">مشاركة واتساب</h3>
+            <p className="text-xs text-slate-400">مشاركة الملخص العام للنتائج</p>
           </div>
           <button 
             onClick={shareGeneralSummary}
-            className="w-full py-3 bg-accent-purple hover:bg-accent-purple/90 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
+            className="w-full py-2 bg-accent-purple hover:bg-accent-purple/90 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-sm"
           >
-            <Share2 className="w-5 h-5" />
-            مشاركة الملخص العام
+            <Share2 className="w-4 h-4" />
+            مشاركة الآن
           </button>
-          <div className="w-full p-4 bg-white/5 rounded-xl text-xs text-slate-400 text-right">
-            <p className="font-bold mb-2 text-white">مثال للرسالة:</p>
-            <p>📊 تقرير أداء الطالب: أحمد...</p>
-            <p>📈 المعدل العام: 85.0%</p>
-            <p>🏆 الترتيب: 5</p>
-          </div>
         </div>
       </div>
 

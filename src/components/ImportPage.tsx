@@ -79,45 +79,90 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
         if (jsonData.length === 0) throw new Error('لم يتم العثور على بيانات صالحة');
 
         const firstRow = jsonData[0];
-        const isWideFormat = !Object.keys(firstRow).some(k => {
+        // Determine if it's wide format (subjects as columns) or long format (subjects as rows)
+        // A file is long format if it has both a 'Subject' column and a 'Score' column
+        const allKeys = Object.keys(firstRow);
+        const hasSubjectCol = allKeys.some(k => {
           const nk = normalizeArabic(k);
-          return nk.includes('اسم الماده') || nk.includes('الماده');
+          return nk === 'الماده' || nk === 'subject' || nk === 'المواد' || nk === 'ماده';
         });
+        const hasScoreCol = allKeys.some(k => {
+          const nk = normalizeArabic(k);
+          return nk === 'الدرجه' || nk === 'score' || nk === 'النتيجه' || nk === 'درجه' || nk === 'الدرجات';
+        });
+
+        const isWideFormat = !(hasSubjectCol && hasScoreCol);
 
         let mappedData: StudentRecord[] = [];
 
         if (isWideFormat) {
           const isMetadataKey = (key: string) => {
             const normalized = normalizeArabic(key);
+            
+            // Explicitly allow common subjects even if they might match a pattern
+            const commonSubjects = ['القران', 'القرانالكريم', 'اسلاميه', 'تربيهاسلاميه', 'لغهعربيه', 'عربي', 'انجليزي', 'رياضيات', 'علوم', 'فيزياء', 'كيمياء', 'احياء'];
+            if (commonSubjects.some(s => normalized.includes(s))) return false;
+
             const metadataPatterns = [
-              'studentid', 'رقم', 'id', 'رقمجلوس', 'كود', 'code',
+              'studentid', 'رقم', 'id', 'رقمجلوس', 'كود', 'code', 'رقمطالب',
               'studentname', 'اسم', 'الاسم', 'name', 'الطالب', 'الطالبه', 'تلميذ', 'تلميذه',
               'gradelevel', 'الصف', 'grade', 'المستوى',
               'classsection', 'الشعبه', 'الفصل', 'section', 'class', 'مجموعه',
               'term', 'الفصل الدراسي', 'الترم', 'فصل',
-              'examtype', 'نوع الاختبار', 'الاختبار', 'نوع',
+              'examtype', 'نوع الاختبار', 'الاختبار',
               'examdate', 'تاريخ الاختبار', 'التاريخ', 'تاريخ',
               'notes', 'ملاحظات', 'الملاحظات',
-              'gender', 'الجنس', 'نوع',
+              'gender', 'الجنس',
               'teachername', 'اسم المعلم', 'المعلم',
               'teachercode', 'كود المعلم',
               'المعدل', 'النسبه', 'التقدير', 'الترتيب', 'average', 'percentage', 'rank', 'total', 'المجموع', 'مجموع'
             ];
             return metadataPatterns.some(p => {
               const np = normalizeArabic(p);
-              return normalized.includes(np) || np.includes(normalized);
+              // Use more strict matching for metadata keys to avoid false positives with subjects
+              if (normalized === np) return true;
+              if (normalized.length > 3 && np.length > 3) {
+                return normalized.includes(np) || np.includes(normalized);
+              }
+              return false;
             });
           };
 
           jsonData.forEach((row, index) => {
-            const studentIdKey = Object.keys(row).find(k => {
+            const allKeys = Object.keys(row);
+            
+            // Priority 1: Keys that explicitly mention ID/Number and NOT Name
+            let studentIdKey = allKeys.find(k => {
               const nk = normalizeArabic(k);
-              return nk.includes('رقم') || nk.includes('id') || nk.includes('رقمجلوس') || nk.includes('كود') || nk.includes('رقمطالب');
+              const hasId = nk.includes('رقم') || nk.includes('id') || nk.includes('كود');
+              const hasName = nk.includes('اسم') || nk.includes('الاسم') || nk.includes('name');
+              return hasId && !hasName;
             });
-            const studentNameKey = Object.keys(row).find(k => {
+            
+            // Priority 2: Any ID-like key
+            if (!studentIdKey) {
+              studentIdKey = allKeys.find(k => {
+                const nk = normalizeArabic(k);
+                return nk.includes('رقم') || nk.includes('id') || nk.includes('كود');
+              });
+            }
+
+            // Priority 1: Keys that explicitly mention Name and NOT ID/Number
+            let studentNameKey = allKeys.find(k => {
               const nk = normalizeArabic(k);
-              return nk.includes('اسم') || nk.includes('الاسم') || nk.includes('name') || nk.includes('طالب') || nk.includes('طالبه') || nk.includes('تلميذ');
+              const hasName = nk.includes('اسم') || nk.includes('الاسم') || nk.includes('name');
+              const hasId = nk.includes('رقم') || nk.includes('id') || nk.includes('كود');
+              return hasName && !hasId;
             });
+
+            // Priority 2: Any Name-like key (excluding the one already picked for ID)
+            if (!studentNameKey) {
+              studentNameKey = allKeys.find(k => {
+                if (k === studentIdKey) return false;
+                const nk = normalizeArabic(k);
+                return nk.includes('اسم') || nk.includes('الاسم') || nk.includes('name') || nk === 'طالب' || nk === 'طالبه';
+              });
+            }
             
             const studentId = String(studentIdKey ? row[studentIdKey] : `S${index}`).trim();
             const studentName = String(studentNameKey ? row[studentNameKey] : 'غير معروف').trim();
@@ -138,12 +183,16 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
               
               const value = row[key];
               
-              // If it's not a metadata key and has a numeric value, it's a subject
+              // If it's not a metadata key and has a value, it's a subject
               if (!isMetadataKey(trimmedKey) && value !== undefined && value !== null && value !== '') {
-                const score = Number(value);
+                let score = Number(value);
                 
-                if (!isNaN(score)) {
-                  const maxScore = score > 50 ? 100 : 50;
+                // Handle non-numeric values (like 'غ' for absent) as 0
+                if (isNaN(score)) {
+                  score = 0;
+                }
+                
+                const maxScore = score > 50 ? 100 : 50;
                   
                   mappedData.push({
                     student_id: studentId,
@@ -163,10 +212,9 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
                     gender
                   });
                 }
-              }
+              });
             });
-          });
-        } else {
+          } else {
           // Long format handling with robust key detection
           mappedData = jsonData.map((row, index) => {
             const findKey = (patterns: string[]) => {
@@ -176,13 +224,25 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
               });
             };
 
-            const idKey = findKey(['رقم', 'id', 'رقمجلوس', 'كود', 'رقمطالب']);
-            const nameKey = findKey(['اسم', 'الاسم', 'name', 'طالب', 'طالبه', 'تلميذ']);
-            const subjectKey = findKey(['الماده', 'subject', 'المواد', 'ماده']);
+            const idKey = findKey(['رقم', 'id', 'كود']);
+            const allKeys = Object.keys(row);
+            const nameKey = allKeys.find(k => {
+              const nk = normalizeArabic(k);
+              const hasName = nk.includes('اسم') || nk.includes('الاسم') || nk.includes('name');
+              const hasId = nk.includes('رقم') || nk.includes('id') || nk.includes('كود');
+              return hasName && !hasId;
+            }) || allKeys.find(k => {
+              const nk = normalizeArabic(k);
+              return nk.includes('اسم') || nk.includes('الاسم') || nk.includes('name') || nk === 'طالب' || nk === 'طالبه';
+            });
+            
+            const subjectKey = findKey(['الماده', 'subject', 'المواد', 'ماده', 'القران', 'اسلاميه', 'عربي', 'انجليزي', 'رياضيات', 'علوم']);
             const scoreKey = findKey(['الدرجه', 'score', 'النتيجه', 'درجه', 'الدرجات']);
             const maxScoreKey = findKey(['العظمى', 'maxscore', 'نهايه', 'عظمى']);
 
-            const score = Number(row[scoreKey || ''] || 0);
+            let score = Number(row[scoreKey || ''] || 0);
+            if (isNaN(score)) score = 0;
+            
             const maxScore = Number(row[maxScoreKey || ''] || 100);
             
             return {
