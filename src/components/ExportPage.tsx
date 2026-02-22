@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { 
   FileDown, FileSpreadsheet, FileText, MessageSquare, 
@@ -106,6 +106,8 @@ ${student.recommendation}
     return `https://wa.me/?text=${message}`;
   };
 
+  const [tableTitle, setTableTitle] = useState('مشاركة سريعة للطلاب (أعلى 10)');
+
   if (data.length === 0) return null;
 
   return (
@@ -168,8 +170,13 @@ ${student.recommendation}
       {/* WhatsApp Quick Share List */}
       <div className="glass-card overflow-hidden">
         <div className="p-4 bg-white/5 border-b border-white/5 flex items-center justify-between">
-          <span className="font-bold">مشاركة سريعة للطلاب (أعلى 10)</span>
-          <Share2 className="text-accent-purple w-5 h-5" />
+          <input 
+            type="text"
+            value={tableTitle}
+            onChange={(e) => setTableTitle(e.target.value)}
+            className="bg-transparent border-none focus:ring-1 focus:ring-accent-purple outline-none font-bold w-full"
+          />
+          <Share2 className="text-accent-purple w-5 h-5 flex-shrink-0" />
         </div>
         <div className="divide-y divide-white/5">
           {studentSummaries.slice(0, 10).map((s, i) => (

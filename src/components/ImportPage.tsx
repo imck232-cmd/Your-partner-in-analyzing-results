@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion } from 'motion/react';
 import { FileUp, FileSpreadsheet, AlertCircle, CheckCircle2, Download, Trash2, Sparkles } from 'lucide-react';
@@ -18,6 +18,19 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<StudentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [tableTitle, setTableTitle] = useState('معاينة البيانات المستوردة');
+
+  const normalizeArabic = (str: string) => {
+    return String(str || '')
+      .replace(/[أإآ]/g, 'ا')
+      .replace(/ة/g, 'ه')
+      .replace(/ى/g, 'ي')
+      .replace(/[\u064B-\u065F]/g, '') // Remove Harakat (Tashkeel)
+      .replace(/_/g, '')
+      .replace(/\s+/g, '')
+      .trim()
+      .toLowerCase();
+  };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -34,17 +47,15 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         
-        // Get raw rows to find the header row manually
         const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
         if (rawRows.length === 0) throw new Error('الملف فارغ');
 
-        // Find the header row (the first row that contains 'اسم الطالب' or 'رقم الطالب')
         let headerRowIndex = 0;
         for (let i = 0; i < Math.min(rawRows.length, 20); i++) {
           const row = rawRows[i];
           if (row && row.some(cell => {
-            const str = String(cell || '').replace(/_/g, '').replace(/\s+/g, ' ').trim();
-            return str.includes('اسم الطالب') || str.includes('رقم الطالب') || str.includes('الاسم');
+            const normalized = normalizeArabic(String(cell));
+            return normalized.includes('اسم') || normalized.includes('رقم') || normalized.includes('id');
           })) {
             headerRowIndex = i;
             break;
@@ -59,43 +70,53 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
           });
           return obj;
         }).filter(row => {
-          const hasName = Object.keys(row).some(k => k.includes('اسم') && row[k]);
-          const hasId = Object.keys(row).some(k => k.includes('رقم') && row[k]);
+          const hasName = Object.keys(row).some(k => normalizeArabic(k).includes('اسم') && row[k]);
+          const hasId = Object.keys(row).some(k => (normalizeArabic(k).includes('رقم') || normalizeArabic(k).includes('id')) && row[k]);
           return hasName || hasId;
         });
 
         if (jsonData.length === 0) throw new Error('لم يتم العثور على بيانات صالحة');
 
-        // Detect if it's wide format (subjects as columns) or long format
         const firstRow = jsonData[0];
-        const isWideFormat = !Object.keys(firstRow).some(k => k.includes('اسم المادة') || k.includes('المادة'));
+        const isWideFormat = !Object.keys(firstRow).some(k => {
+          const nk = normalizeArabic(k);
+          return nk.includes('اسم الماده') || nk.includes('الماده');
+        });
 
         let mappedData: StudentRecord[] = [];
 
         if (isWideFormat) {
-          // Wide format handling
           const isMetadataKey = (key: string) => {
-            const normalized = key.replace(/_/g, '').replace(/\s+/g, ' ').trim();
+            const normalized = normalizeArabic(key);
             const metadataPatterns = [
-              'studentid', 'رقم الطالب', 'الرقم', 'id', 'رقم الجلوس',
-              'studentname', 'اسم الطالب', 'الاسم', 'name',
+              'studentid', 'رقم', 'id', 'رقمجلوس',
+              'studentname', 'اسم', 'الاسم', 'name',
               'gradelevel', 'الصف', 'grade',
-              'classsection', 'الشعبة', 'الفصل', 'section', 'class',
+              'classsection', 'الشعبه', 'الفصل', 'section', 'class',
               'term', 'الفصل الدراسي', 'الترم',
               'examtype', 'نوع الاختبار', 'الاختبار',
               'examdate', 'تاريخ الاختبار', 'التاريخ',
-              'notes', 'ملاحظات', 'الملاحظات',
+              'notes', 'ملاحظات',
               'gender', 'الجنس',
               'teachername', 'اسم المعلم',
               'teachercode', 'كود المعلم',
-              'المعدل', 'النسبة', 'التقدير', 'الترتيب', 'average', 'percentage', 'rank', 'total', 'المجموع', 'مجموع'
+              'المعدل', 'النسبه', 'التقدير', 'الترتيب', 'average', 'percentage', 'rank', 'total', 'المجموع'
             ];
-            return metadataPatterns.some(p => normalized.includes(p) || p.includes(normalized));
+            return metadataPatterns.some(p => {
+              const np = normalizeArabic(p);
+              return normalized.includes(np) || np.includes(normalized);
+            });
           };
 
           jsonData.forEach((row, index) => {
-            const studentIdKey = Object.keys(row).find(k => k.includes('رقم الطالب') || k.includes('الرقم') || k.includes('id') || k.includes('رقم الجلوس'));
-            const studentNameKey = Object.keys(row).find(k => k.includes('اسم الطالب') || k.includes('الاسم') || k.includes('name'));
+            const studentIdKey = Object.keys(row).find(k => {
+              const nk = normalizeArabic(k);
+              return nk.includes('رقم') || nk.includes('id') || nk.includes('رقمجلوس');
+            });
+            const studentNameKey = Object.keys(row).find(k => {
+              const nk = normalizeArabic(k);
+              return nk.includes('اسم') || nk.includes('name');
+            });
             
             const studentId = String(studentIdKey ? row[studentIdKey] : `S${index}`).trim();
             const studentName = String(studentNameKey ? row[studentNameKey] : 'غير معروف').trim();
@@ -145,21 +166,34 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
             });
           });
         } else {
-          // Long format handling
+          // Long format handling with robust key detection
           mappedData = jsonData.map((row, index) => {
-            const score = Number(row.score || row['الدرجة'] || 0);
-            const maxScore = Number(row.max_score || row['الدرجة العظمى'] || 100);
+            const findKey = (patterns: string[]) => {
+              return Object.keys(row).find(k => {
+                const nk = normalizeArabic(k);
+                return patterns.some(p => nk.includes(normalizeArabic(p)));
+              });
+            };
+
+            const idKey = findKey(['رقم', 'id', 'رقمجلوس']);
+            const nameKey = findKey(['اسم', 'name']);
+            const subjectKey = findKey(['الماده', 'subject']);
+            const scoreKey = findKey(['الدرجه', 'score', 'النتيجه']);
+            const maxScoreKey = findKey(['العظمى', 'maxscore']);
+
+            const score = Number(row[scoreKey || ''] || 0);
+            const maxScore = Number(row[maxScoreKey || ''] || 100);
             
             return {
-              student_id: String(row.student_id || row['رقم الطالب'] || row['الرقم'] || row['رقم الجلوس'] || `S${index}`).trim(),
-              student_name: String(row.student_name || row['اسم الطالب'] || row['الاسم'] || 'غير معروف').trim(),
+              student_id: String(row[idKey || ''] || `S${index}`).trim(),
+              student_name: String(row[nameKey || ''] || 'غير معروف').trim(),
               grade_level: Number(row.grade_level || row['الصف'] || 1),
               class_section: String(row.class_section || row['الشعبة'] || 'أ').trim(),
               term: String(row.term || row['الفصل الدراسي'] || 'الأول').trim(),
               exam_type: String(row.exam_type || row['نوع الاختبار'] || 'نهائي').trim(),
               exam_date: String(row.exam_date || row['تاريخ الاختبار'] || new Date().toLocaleDateString()).trim(),
               subject_code: String(row.subject_code || row['كود المادة'] || 'GEN').trim(),
-              subject_name: String(row.subject_name || row['اسم المادة'] || row['المادة'] || 'مادة عامة').trim(),
+              subject_name: String(row[subjectKey || ''] || 'مادة عامة').trim(),
               score,
               max_score: maxScore,
               percentage: (score / maxScore) * 100,
@@ -195,7 +229,7 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
   } as any);
 
   // Group preview data for display
-  const groupedPreview = useCallback(() => {
+  const groupedData = useMemo(() => {
     const students: Record<string, any> = {};
     const subjects = new Set<string>();
 
@@ -209,13 +243,122 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
       }
       students[record.student_id].scores[record.subject_name] = record.score;
       subjects.add(record.subject_name);
-    }, {});
+    });
 
     return {
       rows: Object.values(students),
       subjects: Array.from(subjects)
     };
-  }, [preview])();
+  }, [preview]);
+
+  const handleCellEdit = (studentId: string, field: 'id' | 'name' | string, value: string) => {
+    setPreview(prev => {
+      if (field === 'id') {
+        return prev.map(r => r.student_id === studentId ? { ...r, student_id: value } : r);
+      }
+      if (field === 'name') {
+        return prev.map(r => r.student_id === studentId ? { ...r, student_name: value } : r);
+      }
+      // It's a subject score
+      return prev.map(r => {
+        if (r.student_id === studentId && r.subject_name === field) {
+          const numValue = Number(value) || 0;
+          return { 
+            ...r, 
+            score: numValue,
+            percentage: (numValue / r.max_score) * 100
+          };
+        }
+        return r;
+      });
+    });
+  };
+
+  const handleHeaderEdit = (oldSubject: string, newSubject: string) => {
+    if (!newSubject.trim()) return;
+    setPreview(prev => prev.map(r => 
+      r.subject_name === oldSubject ? { ...r, subject_name: newSubject, subject_code: newSubject } : r
+    ));
+  };
+
+  const handleAddRow = () => {
+    const newId = `NEW-${Date.now()}`;
+    const subjects = groupedData.subjects;
+    if (subjects.length === 0) {
+      subjects.push('مادة جديدة');
+    }
+    
+    const newRecords: StudentRecord[] = subjects.map(sub => ({
+      student_id: newId,
+      student_name: 'طالب جديد',
+      grade_level: 1,
+      class_section: 'أ',
+      term: 'الأول',
+      exam_type: 'نهائي',
+      exam_date: new Date().toLocaleDateString(),
+      subject_code: sub,
+      subject_name: sub,
+      score: 0,
+      max_score: 100,
+      percentage: 0,
+      weight: 1,
+      notes: '',
+      gender: ''
+    }));
+
+    setPreview(prev => [...prev, ...newRecords]);
+  };
+
+  const handleAddSubject = () => {
+    const newSubject = `مادة ${groupedData.subjects.length + 1}`;
+    const studentIds = groupedData.rows.map(r => r.id);
+    
+    if (studentIds.length === 0) {
+      // If no students, just add one student with this subject
+      const newId = `NEW-${Date.now()}`;
+      setPreview([{
+        student_id: newId,
+        student_name: 'طالب جديد',
+        grade_level: 1,
+        class_section: 'أ',
+        term: 'الأول',
+        exam_type: 'نهائي',
+        exam_date: new Date().toLocaleDateString(),
+        subject_code: newSubject,
+        subject_name: newSubject,
+        score: 0,
+        max_score: 100,
+        percentage: 0,
+        weight: 1,
+        notes: '',
+        gender: ''
+      }]);
+      return;
+    }
+
+    const newRecords: StudentRecord[] = studentIds.map(sid => {
+      const studentName = groupedData.rows.find(r => r.id === sid)?.name || 'غير معروف';
+      return {
+        student_id: sid,
+        student_name: studentName,
+        grade_level: 1,
+        class_section: 'أ',
+        term: 'الأول',
+        exam_type: 'نهائي',
+        exam_date: new Date().toLocaleDateString(),
+        subject_code: newSubject,
+        subject_name: newSubject,
+        score: 0,
+        max_score: 100,
+        percentage: 0,
+        weight: 1,
+        notes: '',
+        gender: ''
+      };
+    });
+
+    setPreview(prev => [...prev, ...newRecords]);
+  };
 
   const downloadTemplate = () => {
     const template = [
@@ -367,37 +510,85 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
           className="space-y-6"
         >
           <div className="glass-card overflow-hidden">
-            <div className="p-4 border-b border-white/5 bg-white/5 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="text-emerald-400 w-5 h-5" />
-                <span className="font-bold">معاينة البيانات ({preview.length} سجل)</span>
+            <div className="p-4 border-b border-white/5 bg-white/5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 flex-1">
+                <CheckCircle2 className="text-emerald-400 w-5 h-5 flex-shrink-0" />
+                <input 
+                  type="text"
+                  value={tableTitle}
+                  onChange={(e) => setTableTitle(e.target.value)}
+                  className="bg-transparent border-b border-white/10 focus:border-accent-purple outline-none font-bold text-lg w-full"
+                  placeholder="عنوان الجدول..."
+                />
               </div>
-              <button 
-                onClick={() => setPreview([])}
-                className="p-2 hover:bg-red-500/10 text-red-400 rounded-lg transition-colors"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleAddRow}
+                  className="p-2 bg-accent-purple/10 text-accent-purple hover:bg-accent-purple hover:text-white rounded-lg transition-all text-xs font-bold flex items-center gap-1"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  إضافة طالب
+                </button>
+                <button 
+                  onClick={handleAddSubject}
+                  className="p-2 bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white rounded-lg transition-all text-xs font-bold flex items-center gap-1"
+                >
+                  <FileUp className="w-4 h-4" />
+                  إضافة مادة
+                </button>
+                <button 
+                  onClick={() => setPreview([])}
+                  className="p-2 hover:bg-red-500/10 text-red-400 rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-right">
                 <thead className="bg-white/5 text-slate-400 text-sm">
                   <tr>
-                    <th className="p-4">رقم الطالب</th>
-                    <th className="p-4">اســـم الطالب</th>
-                    {groupedPreview.subjects.map(subject => (
-                      <th key={subject} className="p-4">{subject}</th>
+                    <th className="p-4 min-w-[120px]">رقم الطالب</th>
+                    <th className="p-4 min-w-[200px]">اســـم الطالب</th>
+                    {groupedData.subjects.map(subject => (
+                      <th key={subject} className="p-4 min-w-[100px]">
+                        <input 
+                          type="text"
+                          value={subject}
+                          onChange={(e) => handleHeaderEdit(subject, e.target.value)}
+                          className="bg-transparent border-none focus:ring-1 focus:ring-accent-purple outline-none text-center w-full font-bold text-slate-200"
+                        />
+                      </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {groupedPreview.rows.map((row, i) => (
+                  {groupedData.rows.map((row, i) => (
                     <tr key={i} className="hover:bg-white/5 transition-colors">
-                      <td className="p-4 font-mono">{row.id}</td>
-                      <td className="p-4">{row.name}</td>
-                      {groupedPreview.subjects.map(subject => (
-                        <td key={subject} className="p-4 text-center">
-                          {row.scores[subject] !== undefined ? row.scores[subject] : '-'}
+                      <td className="p-2">
+                        <input 
+                          type="text"
+                          value={row.id}
+                          onChange={(e) => handleCellEdit(row.id, 'id', e.target.value)}
+                          className="bg-transparent border-none focus:ring-1 focus:ring-accent-purple outline-none w-full p-2 font-mono text-sm"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input 
+                          type="text"
+                          value={row.name}
+                          onChange={(e) => handleCellEdit(row.id, 'name', e.target.value)}
+                          className="bg-transparent border-none focus:ring-1 focus:ring-accent-purple outline-none w-full p-2"
+                        />
+                      </td>
+                      {groupedData.subjects.map(subject => (
+                        <td key={subject} className="p-2">
+                          <input 
+                            type="number"
+                            value={row.scores[subject] !== undefined ? row.scores[subject] : ''}
+                            onChange={(e) => handleCellEdit(row.id, subject, e.target.value)}
+                            className="bg-transparent border-none focus:ring-1 focus:ring-accent-purple outline-none w-full p-2 text-center"
+                          />
                         </td>
                       ))}
                     </tr>

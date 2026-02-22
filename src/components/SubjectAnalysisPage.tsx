@@ -33,6 +33,13 @@ export default function SubjectAnalysisPage({ data }: SubjectAnalysisPageProps) 
   const excellentStudents = subjectStudents.filter(s => s.category === 'متميز');
   const atRiskStudents = subjectStudents.filter(s => s.category === 'معرض للخطر');
 
+  const [tableTitle, setTableTitle] = useState(`قائمة الطلاب في مادة ${selectedSubject}`);
+
+  // Update table title when subject changes
+  useMemo(() => {
+    setTableTitle(`قائمة الطلاب في مادة ${selectedSubject}`);
+  }, [selectedSubject]);
+
   if (subjects.length === 0) return null;
 
   return (
@@ -77,7 +84,12 @@ export default function SubjectAnalysisPage({ data }: SubjectAnalysisPageProps) 
           {/* Student List */}
           <div className="glass-card overflow-hidden">
             <div className="p-4 bg-white/5 border-b border-white/5 flex items-center justify-between">
-              <span className="font-bold">قائمة الطلاب في مادة {selectedSubject}</span>
+              <input 
+                type="text"
+                value={tableTitle}
+                onChange={(e) => setTableTitle(e.target.value)}
+                className="bg-transparent border-none focus:ring-1 focus:ring-accent-purple outline-none font-bold w-full"
+              />
             </div>
             <div className="max-h-[500px] overflow-y-auto">
               <table className="w-full text-right">
