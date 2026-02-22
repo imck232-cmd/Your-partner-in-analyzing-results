@@ -127,7 +127,7 @@ export default function App() {
               <div className="w-10 h-10 bg-accent-purple rounded-lg flex items-center justify-center shadow-lg shadow-accent-purple/20">
                 <TrendingUp className="text-white w-6 h-6" />
               </div>
-              <span className="font-bold text-lg tracking-tight">رفيقك</span>
+              <span className="font-bold text-lg">رفيقك</span>
             </motion.div>
           )}
           {!isMobile && (
@@ -160,7 +160,7 @@ export default function App() {
               }`}
             >
               <item.icon className={`w-5 h-5 flex-shrink-0 ${activePage === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'}`} />
-              {(isSidebarOpen || isMobile) && <span className="font-medium whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>}
+              {(isSidebarOpen || isMobile) && <span className="font-medium whitespace-nowrap">{item.label}</span>}
             </button>
           ))}
         </nav>

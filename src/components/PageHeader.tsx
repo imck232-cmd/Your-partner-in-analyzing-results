@@ -27,7 +27,10 @@ export default function PageHeader({ title, description, data, pageId }: PageHea
     try {
       // Temporarily hide export buttons for the screenshot
       const buttons = element.querySelectorAll('.export-buttons');
-      buttons.forEach(b => (b as HTMLElement).style.display = 'none');
+      buttons.forEach(b => (b as HTMLElement).style.visibility = 'hidden');
+
+      // Small delay to ensure all charts and animations are settled
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       const canvas = await html2canvas(element, {
         scale: 2,
@@ -35,11 +38,18 @@ export default function PageHeader({ title, description, data, pageId }: PageHea
         logging: false,
         backgroundColor: '#0f172a',
         windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight
+        windowHeight: element.scrollHeight,
+        onclone: (clonedDoc) => {
+          const clonedElement = clonedDoc.getElementById('export-container');
+          if (clonedElement) {
+            clonedElement.style.height = 'auto';
+            clonedElement.style.overflow = 'visible';
+          }
+        }
       });
       
       // Restore buttons
-      buttons.forEach(b => (b as HTMLElement).style.display = 'flex');
+      buttons.forEach(b => (b as HTMLElement).style.visibility = 'visible');
 
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
@@ -52,6 +62,7 @@ export default function PageHeader({ title, description, data, pageId }: PageHea
       pdf.save(`${title}_${new Date().toLocaleDateString()}.pdf`);
     } catch (error) {
       console.error('PDF Export Error:', error);
+      alert('حدث خطأ أثناء تصدير التقرير. يرجى المحاولة مرة أخرى.');
     }
   };
 

@@ -26,8 +26,7 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
       .replace(/ة/g, 'ه')
       .replace(/ى/g, 'ي')
       .replace(/[\u064B-\u065F]/g, '') // Remove Harakat (Tashkeel)
-      .replace(/_/g, '')
-      .replace(/\s+/g, '')
+      .replace(/[^\u0621-\u064A0-9a-zA-Z]/g, '') // Remove everything except Arabic letters and numbers
       .trim()
       .toLowerCase();
   };
@@ -89,18 +88,18 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
           const isMetadataKey = (key: string) => {
             const normalized = normalizeArabic(key);
             const metadataPatterns = [
-              'studentid', 'رقم', 'id', 'رقمجلوس',
-              'studentname', 'اسم', 'الاسم', 'name',
-              'gradelevel', 'الصف', 'grade',
-              'classsection', 'الشعبه', 'الفصل', 'section', 'class',
-              'term', 'الفصل الدراسي', 'الترم',
-              'examtype', 'نوع الاختبار', 'الاختبار',
-              'examdate', 'تاريخ الاختبار', 'التاريخ',
-              'notes', 'ملاحظات',
-              'gender', 'الجنس',
-              'teachername', 'اسم المعلم',
+              'studentid', 'رقم', 'id', 'رقمجلوس', 'كود', 'code',
+              'studentname', 'اسم', 'الاسم', 'name', 'الطالب', 'الطالبه',
+              'gradelevel', 'الصف', 'grade', 'المستوى',
+              'classsection', 'الشعبه', 'الفصل', 'section', 'class', 'مجموعه',
+              'term', 'الفصل الدراسي', 'الترم', 'فصل',
+              'examtype', 'نوع الاختبار', 'الاختبار', 'نوع',
+              'examdate', 'تاريخ الاختبار', 'التاريخ', 'تاريخ',
+              'notes', 'ملاحظات', 'الملاحظات',
+              'gender', 'الجنس', 'نوع',
+              'teachername', 'اسم المعلم', 'المعلم',
               'teachercode', 'كود المعلم',
-              'المعدل', 'النسبه', 'التقدير', 'الترتيب', 'average', 'percentage', 'rank', 'total', 'المجموع'
+              'المعدل', 'النسبه', 'التقدير', 'الترتيب', 'average', 'percentage', 'rank', 'total', 'المجموع', 'مجموع'
             ];
             return metadataPatterns.some(p => {
               const np = normalizeArabic(p);
@@ -111,11 +110,11 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
           jsonData.forEach((row, index) => {
             const studentIdKey = Object.keys(row).find(k => {
               const nk = normalizeArabic(k);
-              return nk.includes('رقم') || nk.includes('id') || nk.includes('رقمجلوس');
+              return nk.includes('رقم') || nk.includes('id') || nk.includes('رقمجلوس') || nk.includes('كود');
             });
             const studentNameKey = Object.keys(row).find(k => {
               const nk = normalizeArabic(k);
-              return nk.includes('اسم') || nk.includes('name');
+              return nk.includes('اسم') || nk.includes('الاسم') || nk.includes('name');
             });
             
             const studentId = String(studentIdKey ? row[studentIdKey] : `S${index}`).trim();
@@ -175,11 +174,11 @@ export default function ImportPage({ onDataLoaded }: ImportPageProps) {
               });
             };
 
-            const idKey = findKey(['رقم', 'id', 'رقمجلوس']);
-            const nameKey = findKey(['اسم', 'name']);
-            const subjectKey = findKey(['الماده', 'subject']);
-            const scoreKey = findKey(['الدرجه', 'score', 'النتيجه']);
-            const maxScoreKey = findKey(['العظمى', 'maxscore']);
+            const idKey = findKey(['رقم', 'id', 'رقمجلوس', 'كود']);
+            const nameKey = findKey(['اسم', 'الاسم', 'name']);
+            const subjectKey = findKey(['الماده', 'subject', 'المواد']);
+            const scoreKey = findKey(['الدرجه', 'score', 'النتيجه', 'درجه']);
+            const maxScoreKey = findKey(['العظمى', 'maxscore', 'نهايه']);
 
             const score = Number(row[scoreKey || ''] || 0);
             const maxScore = Number(row[maxScoreKey || ''] || 100);
