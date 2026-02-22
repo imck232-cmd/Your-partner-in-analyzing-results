@@ -30,7 +30,7 @@ export default function WelcomePage({ onStart }: WelcomePageProps) {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="text-6xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white via-white to-slate-500"
+          className="text-4xl md:text-6xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white via-white to-slate-500"
         >
           رفيقك في تحليل النتائج
         </motion.h1>
@@ -48,17 +48,17 @@ export default function WelcomePage({ onStart }: WelcomePageProps) {
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.4 }}
-        className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl"
+        className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6 w-full max-w-4xl px-4"
       >
         {[
           { icon: ShieldCheck, title: "دقة عالية", desc: "تحليل إحصائي متقدم وموثوق" },
           { icon: TrendingUp, title: "رؤى ذكية", desc: "توصيات بناءً على اتجاهات الأداء" },
           { icon: Award, title: "تقارير احترافية", desc: "تصدير Excel و PDF بجودة عالية" }
         ].map((feature, i) => (
-          <div key={i} className="glass-card p-6 space-y-3 hover:bg-white/10 transition-colors group">
-            <feature.icon className="w-8 h-8 text-accent-purple group-hover:scale-110 transition-transform" />
-            <h3 className="font-bold text-lg">{feature.title}</h3>
-            <p className="text-sm text-slate-400">{feature.desc}</p>
+          <div key={i} className={`glass-card p-3 md:p-6 space-y-2 md:space-y-3 hover:bg-white/10 transition-colors group ${i === 2 ? 'col-span-2 md:col-span-1' : ''}`}>
+            <feature.icon className="w-6 h-6 md:w-8 md:h-8 text-accent-purple group-hover:scale-110 transition-transform" />
+            <h3 className="font-bold text-sm md:text-lg">{feature.title}</h3>
+            <p className="text-[10px] md:text-sm text-slate-400">{feature.desc}</p>
           </div>
         ))}
       </motion.div>

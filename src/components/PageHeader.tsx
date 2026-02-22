@@ -85,10 +85,10 @@ export default function PageHeader({ title, description, data, pageId }: PageHea
         <button 
           onClick={exportToPDF}
           className="glass-button flex items-center gap-2 text-red-400 border-red-400/30 px-4 py-2"
-          title="تصدير PDF"
+          title="تصدير تقرير مرئي PDF"
         >
           <FileText className="w-5 h-5" />
-          <span className="hidden sm:inline">PDF</span>
+          <span className="hidden sm:inline">تقرير مرئي (PDF)</span>
         </button>
         
         <button 

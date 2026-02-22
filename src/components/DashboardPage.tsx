@@ -67,12 +67,12 @@ export default function DashboardPage({ data }: DashboardPageProps) {
   return (
     <div className="space-y-8">
       {/* KPIs Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-4">
         {kpis.map((kpi, i) => (
-          <div key={i} className="glass-card p-4 flex flex-col items-center text-center space-y-2">
-            <kpi.icon className={`w-8 h-8 ${kpi.color}`} />
-            <span className="text-2xl font-bold">{kpi.value}</span>
-            <span className="text-xs text-slate-400 font-medium">{kpi.label}</span>
+          <div key={i} className="glass-card p-2 md:p-4 flex flex-col items-center text-center space-y-1 md:space-y-2">
+            <kpi.icon className={`w-6 h-6 md:w-8 md:h-8 ${kpi.color}`} />
+            <span className="text-lg md:text-2xl font-bold">{kpi.value}</span>
+            <span className="text-[10px] md:text-xs text-slate-400 font-medium">{kpi.label}</span>
           </div>
         ))}
       </div>

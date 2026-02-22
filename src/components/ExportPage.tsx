@@ -223,15 +223,15 @@ ${atRiskCount > totalStudents * 0.2
             <FileText className="w-10 h-10 text-red-400" />
           </div>
           <div className="space-y-2">
-            <h3 className="text-xl font-bold">تصدير تقرير PDF</h3>
-            <p className="text-sm text-slate-400">تقرير مطبوع جاهز للتوزيع يحتوي على ملخص الأداء والرسوم البيانية</p>
+            <h3 className="text-xl font-bold">تصدير تقرير مرئي (PDF)</h3>
+            <p className="text-sm text-slate-400">تقرير مطبوع يحتوي على كافة الرسوم البيانية، المنحنيات، والتحليلات كما تظهر في البرنامج</p>
           </div>
           <button 
             onClick={exportToPDF}
             className="w-full py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
           >
             <Download className="w-5 h-5" />
-            تصدير الآن
+            تصدير التقرير المرئي
           </button>
         </div>
 

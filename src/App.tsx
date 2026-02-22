@@ -148,7 +148,7 @@ export default function App() {
           )}
         </div>
 
-        <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
+        <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto overflow-x-hidden">
           {menuItems.map((item) => (
             <button
               key={item.id}
@@ -159,8 +159,8 @@ export default function App() {
                 : 'hover:bg-white/5 text-slate-400 hover:text-white'
               }`}
             >
-              <item.icon className={`w-5 h-5 ${activePage === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'}`} />
-              {(isSidebarOpen || isMobile) && <span className="font-medium">{item.label}</span>}
+              <item.icon className={`w-5 h-5 flex-shrink-0 ${activePage === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'}`} />
+              {(isSidebarOpen || isMobile) && <span className="font-medium whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>}
             </button>
           ))}
         </nav>

@@ -26,6 +26,18 @@
   }
 }
 
+@layer utilities {
+  .whitespace-nowrap {
+    white-space: nowrap !important;
+  }
+}
+
+@layer utilities {
+  .whitespace-nowrap {
+    white-space: nowrap !important;
+  }
+}
+
 @layer base {
   body {
     @apply font-tajawal bg-brand-dark text-slate-100 antialiased;
