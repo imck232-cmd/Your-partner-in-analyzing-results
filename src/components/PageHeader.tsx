@@ -24,13 +24,21 @@ export default function PageHeader({ title, description, data, pageId }: PageHea
     const element = document.getElementById('export-container');
     if (!element) return;
     
+    const loadingToast = document.createElement('div');
+    loadingToast.innerHTML = `
+      <div style="position: fixed; top: 20px; right: 20px; background: #8b5cf6; color: white; padding: 12px 24px; border-radius: 12px; z-index: 9999; font-weight: bold; box-shadow: 0 10px 25px rgba(0,0,0,0.3); display: flex; items-center; gap: 10px; direction: rtl;">
+        <span>جاري تجهيز التقرير المرئي...</span>
+      </div>
+    `;
+    document.body.appendChild(loadingToast);
+
     try {
       // Temporarily hide export buttons for the screenshot
       const buttons = element.querySelectorAll('.export-buttons');
       buttons.forEach(b => (b as HTMLElement).style.visibility = 'hidden');
 
       // Small delay to ensure all charts and animations are settled
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 800));
 
       const canvas = await html2canvas(element, {
         scale: 2,
@@ -44,6 +52,7 @@ export default function PageHeader({ title, description, data, pageId }: PageHea
           if (clonedElement) {
             clonedElement.style.height = 'auto';
             clonedElement.style.overflow = 'visible';
+            clonedElement.style.padding = '20px';
           }
         }
       });
@@ -63,6 +72,8 @@ export default function PageHeader({ title, description, data, pageId }: PageHea
     } catch (error) {
       console.error('PDF Export Error:', error);
       alert('حدث خطأ أثناء تصدير التقرير. يرجى المحاولة مرة أخرى.');
+    } finally {
+      document.body.removeChild(loadingToast);
     }
   };
 
