@@ -1,0 +1,420 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { useCallback, useState } from 'react';
+import { useDropzone } from 'react-dropzone';
+import { motion } from 'motion/react';
+import { FileUp, FileSpreadsheet, AlertCircle, CheckCircle2, Download, Trash2, Sparkles } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { StudentRecord } from '../types';
+
+interface ImportPageProps {
+  onDataLoaded: (data: StudentRecord[]) => void;
+}
+
+export default function ImportPage({ onDataLoaded }: ImportPageProps) {
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<StudentRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    const file = acceptedFiles[0];
+    if (!file) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Get raw rows to find the header row manually
+        const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        if (rawRows.length === 0) throw new Error('الملف فارغ');
+
+        // Find the header row (the first row that contains 'اسم الطالب' or 'رقم الطالب')
+        let headerRowIndex = 0;
+        for (let i = 0; i < Math.min(rawRows.length, 20); i++) {
+          const row = rawRows[i];
+          if (row && row.some(cell => {
+            const str = String(cell || '').replace(/_/g, '').replace(/\s+/g, ' ').trim();
+            return str.includes('اسم الطالب') || str.includes('رقم الطالب') || str.includes('الاسم');
+          })) {
+            headerRowIndex = i;
+            break;
+          }
+        }
+
+        const headers = rawRows[headerRowIndex].map(h => String(h || '').trim());
+        const jsonData = rawRows.slice(headerRowIndex + 1).map(row => {
+          const obj: any = {};
+          headers.forEach((header, i) => {
+            if (header) obj[header] = row[i];
+          });
+          return obj;
+        }).filter(row => {
+          const hasName = Object.keys(row).some(k => k.includes('اسم') && row[k]);
+          const hasId = Object.keys(row).some(k => k.includes('رقم') && row[k]);
+          return hasName || hasId;
+        });
+
+        if (jsonData.length === 0) throw new Error('لم يتم العثور على بيانات صالحة');
+
+        // Detect if it's wide format (subjects as columns) or long format
+        const firstRow = jsonData[0];
+        const isWideFormat = !Object.keys(firstRow).some(k => k.includes('اسم المادة') || k.includes('المادة'));
+
+        let mappedData: StudentRecord[] = [];
+
+        if (isWideFormat) {
+          // Wide format handling
+          const isMetadataKey = (key: string) => {
+            const normalized = key.replace(/_/g, '').replace(/\s+/g, ' ').trim();
+            const metadataPatterns = [
+              'studentid', 'رقم الطالب', 'الرقم', 'id', 'رقم الجلوس',
+              'studentname', 'اسم الطالب', 'الاسم', 'name',
+              'gradelevel', 'الصف', 'grade',
+              'classsection', 'الشعبة', 'الفصل', 'section', 'class',
+              'term', 'الفصل الدراسي', 'الترم',
+              'examtype', 'نوع الاختبار', 'الاختبار',
+              'examdate', 'تاريخ الاختبار', 'التاريخ',
+              'notes', 'ملاحظات', 'الملاحظات',
+              'gender', 'الجنس',
+              'teachername', 'اسم المعلم',
+              'teachercode', 'كود المعلم',
+              'المعدل', 'النسبة', 'التقدير', 'الترتيب', 'average', 'percentage', 'rank', 'total', 'المجموع', 'مجموع'
+            ];
+            return metadataPatterns.some(p => normalized.includes(p) || p.includes(normalized));
+          };
+
+          jsonData.forEach((row, index) => {
+            const studentIdKey = Object.keys(row).find(k => k.includes('رقم الطالب') || k.includes('الرقم') || k.includes('id') || k.includes('رقم الجلوس'));
+            const studentNameKey = Object.keys(row).find(k => k.includes('اسم الطالب') || k.includes('الاسم') || k.includes('name'));
+            
+            const studentId = String(studentIdKey ? row[studentIdKey] : `S${index}`).trim();
+            const studentName = String(studentNameKey ? row[studentNameKey] : 'غير معروف').trim();
+            
+            // Other metadata with defaults
+            const gradeLevel = 1;
+            const classSection = 'أ';
+            const term = 'الأول';
+            const examType = 'نهائي';
+            const examDate = new Date().toLocaleDateString();
+            const notes = '';
+            const gender = '';
+
+            // Iterate over keys to find subjects
+            Object.keys(row).forEach(key => {
+              const trimmedKey = key.trim();
+              if (!trimmedKey) return;
+              
+              const value = row[key];
+              
+              // If it's not a metadata key and has a numeric value, it's a subject
+              if (!isMetadataKey(trimmedKey) && value !== undefined && value !== null && value !== '') {
+                const score = Number(value);
+                
+                if (!isNaN(score)) {
+                  const maxScore = score > 50 ? 100 : 50;
+                  
+                  mappedData.push({
+                    student_id: studentId,
+                    student_name: studentName,
+                    grade_level: gradeLevel,
+                    class_section: classSection,
+                    term: term,
+                    exam_type: examType,
+                    exam_date: examDate,
+                    subject_code: trimmedKey,
+                    subject_name: trimmedKey,
+                    score,
+                    max_score: maxScore,
+                    percentage: (score / maxScore) * 100,
+                    weight: 1,
+                    notes,
+                    gender
+                  });
+                }
+              }
+            });
+          });
+        } else {
+          // Long format handling
+          mappedData = jsonData.map((row, index) => {
+            const score = Number(row.score || row['الدرجة'] || 0);
+            const maxScore = Number(row.max_score || row['الدرجة العظمى'] || 100);
+            
+            return {
+              student_id: String(row.student_id || row['رقم الطالب'] || row['الرقم'] || row['رقم الجلوس'] || `S${index}`).trim(),
+              student_name: String(row.student_name || row['اسم الطالب'] || row['الاسم'] || 'غير معروف').trim(),
+              grade_level: Number(row.grade_level || row['الصف'] || 1),
+              class_section: String(row.class_section || row['الشعبة'] || 'أ').trim(),
+              term: String(row.term || row['الفصل الدراسي'] || 'الأول').trim(),
+              exam_type: String(row.exam_type || row['نوع الاختبار'] || 'نهائي').trim(),
+              exam_date: String(row.exam_date || row['تاريخ الاختبار'] || new Date().toLocaleDateString()).trim(),
+              subject_code: String(row.subject_code || row['كود المادة'] || 'GEN').trim(),
+              subject_name: String(row.subject_name || row['اسم المادة'] || row['المادة'] || 'مادة عامة').trim(),
+              score,
+              max_score: maxScore,
+              percentage: (score / maxScore) * 100,
+              weight: Number(row.weight || row['الوزن'] || 1),
+              teacher_name: row.teacher_name || row['اسم المعلم'],
+              gender: row.gender || row['الجنس'],
+              notes: row.notes || row['ملاحظات']
+            };
+          });
+        }
+
+        if (mappedData.length === 0) throw new Error('لم يتم العثور على بيانات صالحة');
+        
+        setPreview(mappedData);
+      } catch (err) {
+        setError('حدث خطأ أثناء قراءة الملف. تأكد من استخدام التنسيق الصحيح.');
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls'],
+      'text/csv': ['.csv']
+    },
+    multiple: false
+  } as any);
+
+  // Group preview data for display
+  const groupedPreview = useCallback(() => {
+    const students: Record<string, any> = {};
+    const subjects = new Set<string>();
+
+    preview.forEach(record => {
+      if (!students[record.student_id]) {
+        students[record.student_id] = {
+          id: record.student_id,
+          name: record.student_name,
+          scores: {}
+        };
+      }
+      students[record.student_id].scores[record.subject_name] = record.score;
+      subjects.add(record.subject_name);
+    }, {});
+
+    return {
+      rows: Object.values(students),
+      subjects: Array.from(subjects)
+    };
+  }, [preview])();
+
+  const downloadTemplate = () => {
+    const template = [
+      {
+        'رقم الطالب': '2910',
+        'اســـم الطالب': 'اديبه نبيل عبدالواسع محمد علي',
+        'قرأن وعلومة': 31,
+        'تربية إسلامية': 27,
+        'لغة عربية': 42,
+        'لغة إنجليزية': 15,
+        'رياضيات': 35,
+        'كيمياء': 40,
+        'فيزياء': 38,
+        'احياء': 0,
+        'ملاحظـــــــات': ''
+      }
+    ];
+    const ws = XLSX.utils.json_to_sheet(template);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Data_Entry");
+    XLSX.writeFile(wb, "قالب_إدخال_الدرجات_الموحد.xlsx");
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <button 
+          onClick={() => {
+            const sampleData: any[] = [
+              { id: '2910', name: 'اديبه نبيل عبدالواسع محمد علي', scores: { 'قرأن وعلومة': 31, 'تربية إسلامية': 27, 'لغة عربية': 42, 'لغة إنجليزية': 15, 'رياضيات': 35, 'كيمياء': 40, 'فيزياء': 38, 'احياء': 0 } },
+              { id: '294', name: 'اروى صالح علي صالح شليل', scores: { 'قرأن وعلومة': 46, 'تربية إسلامية': 38, 'لغة عربية': 50, 'لغة إنجليزية': 30, 'رياضيات': 50, 'كيمياء': 50, 'فيزياء': 50, 'احياء': 49 } },
+              { id: '302', name: 'اسماء محمد احمد علي الحبيشي', scores: { 'قرأن وعلومة': 33, 'تربية إسلامية': 31, 'لغة عربية': 40, 'لغة إنجليزية': 15, 'رياضيات': 35, 'كيمياء': 42, 'فيزياء': 46, 'احياء': 42 } },
+              { id: '4190', name: 'الاء صادق حسين البطاحي', scores: { 'قرأن وعلومة': 42, 'تربية إسلامية': 0, 'لغة عربية': 48, 'لغة إنجليزية': 27, 'رياضيات': 45, 'كيمياء': 50, 'فيزياء': 45, 'احياء': 38 } },
+              { id: '296', name: 'اية عصام محمد علي الشوافي', scores: { 'قرأن وعلومة': 44, 'تربية إسلامية': 42, 'لغة عربية': 50, 'لغة إنجليزية': 27, 'رياضيات': 48, 'كيمياء': 50, 'فيزياء': 50, 'احياء': 48 } },
+              { id: '288', name: 'اية محمد محمد احمد الفقيه', scores: { 'قرأن وعلومة': 49, 'تربية إسلامية': 39, 'لغة عربية': 50, 'لغة إنجليزية': 27, 'رياضيات': 50, 'كيمياء': 50, 'فيزياء': 50, 'احياء': 48 } },
+              { id: '1569', name: 'ايه محمد ثابت صالح السلامي', scores: { 'قرأن وعلومة': 24, 'تربية إسلامية': 26, 'لغة عربية': 42, 'لغة إنجليزية': 15, 'رياضيات': 30, 'كيمياء': 45, 'فيزياء': 46, 'احياء': 42 } },
+              { id: '303', name: 'براءة حميد منصور علي العنز', scores: { 'قرأن وعلومة': 23, 'تربية إسلامية': 17, 'لغة عربية': 40, 'لغة إنجليزية': 12, 'رياضيات': 25, 'كيمياء': 40, 'فيزياء': 38, 'احياء': 0 } },
+              { id: '4623', name: 'ترتيل حسن احمد عبدالله هيج', scores: { 'قرأن وعلومة': 21, 'تربية إسلامية': 39, 'لغة عربية': 46, 'لغة إنجليزية': 15, 'رياضيات': 38, 'كيمياء': 50, 'فيزياء': 48, 'احياء': 42 } },
+              { id: '291', name: 'خلود وليد محمد احمد العفيف', scores: { 'قرأن وعلومة': 34, 'تربية إسلامية': 27, 'لغة عربية': 42, 'لغة إنجليزية': 15, 'رياضيات': 30, 'كيمياء': 40, 'فيزياء': 42, 'احياء': 0 } },
+              { id: '286', name: 'دعاء رشاد صدقي محمد العمراني', scores: { 'قرأن وعلومة': 35, 'تربية إسلامية': 22, 'لغة عربية': 45, 'لغة إنجليزية': 17, 'رياضيات': 43, 'كيمياء': 46, 'فيزياء': 46, 'احياء': 0 } },
+              { id: '2490', name: 'رؤيا خالد عبدالله حزام الصرمي', scores: { 'قرأن وعلومة': 24, 'تربية إسلامية': 24, 'لغة عربية': 46, 'لغة إنجليزية': 17, 'رياضيات': 32, 'كيمياء': 40, 'فيزياء': 46, 'احياء': 40 } },
+              { id: '4024', name: 'رانيا احمد محمد عبده الطلحه', scores: { 'قرأن وعلومة': 20, 'تربية إسلامية': 0, 'لغة عربية': 47, 'لغة إنجليزية': 17, 'رياضيات': 36, 'كيمياء': 40, 'فيزياء': 38, 'احياء': 0 } },
+              { id: '308', name: 'ربى حمدي علي محمد العبسي', scores: { 'قرأن وعلومة': 25, 'تربية إسلامية': 0, 'لغة عربية': 46, 'لغة إنجليزية': 20, 'رياضيات': 34, 'كيمياء': 50, 'فيزياء': 45, 'احياء': 0 } },
+              { id: '287', name: 'ربى عبدالعزيز عبيد علي الاهدل', scores: { 'قرأن وعلومة': 0, 'تربية إسلامية': 0, 'لغة عربية': 0, 'لغة إنجليزية': 0, 'رياضيات': 0, 'كيمياء': 0, 'فيزياء': 0, 'احياء': 0 } },
+              { id: '290', name: 'ربى محمد عوض علي المصباحي', scores: { 'قرأن وعلومة': 43, 'تربية إسلامية': 23, 'لغة عربية': 42, 'لغة إنجليزية': 19, 'رياضيات': 32, 'كيمياء': 50, 'فيزياء': 46, 'احياء': 0 } },
+              { id: '1977', name: 'رغد عبده ابراهيم عبده الوصابي', scores: { 'قرأن وعلومة': 40, 'تربية إسلامية': 0, 'لغة عربية': 45, 'لغة إنجليزية': 25, 'رياضيات': 48, 'كيمياء': 50, 'فيزياء': 50, 'احياء': 42 } },
+              { id: '2084', name: 'رفيف محسن حسن محمد عبدالله', scores: { 'قرأن وعلومة': 39, 'تربية إسلامية': 28, 'لغة عربية': 42, 'لغة إنجليزية': 22, 'رياضيات': 38, 'كيمياء': 46, 'فيزياء': 46, 'احياء': 42 } },
+              { id: '1498', name: 'رنده عبده محمد نصر الجرفي', scores: { 'قرأن وعلومة': 40, 'تربية إسلامية': 0, 'لغة عربية': 49, 'لغة إنجليزية': 22, 'رياضيات': 45, 'فيزياء': 48, 'احياء': 0 } },
+              { id: '299', name: 'رهف بندر حمود قايد الحرازي', scores: { 'قرأن وعلومة': 44, 'تربية إسلامية': 31, 'لغة عربية': 48, 'لغة إنجليزية': 20, 'رياضيات': 45, 'كيمياء': 50, 'فيزياء': 50, 'احياء': 46 } },
+              { id: '3860', name: 'ريتاج احمد محمد حسن الاحلسي', scores: { 'قرأن وعلومة': 32, 'تربية إسلامية': 0, 'لغة عربية': 42, 'لغة إنجليزية': 16, 'رياضيات': 25, 'كيمياء': 40, 'فيزياء': 40, 'احياء': 0 } },
+              { id: '1803', name: 'ريماس مهند محفوظ محمد غالب', scores: { 'قرأن وعلومة': 28, 'تربية إسلامية': 0, 'لغة عربية': 43, 'لغة إنجليزية': 15, 'رياضيات': 25, 'كيمياء': 42, 'فيزياء': 46, 'احياء': 0 } },
+              { id: '4018', name: 'زينب محي الدين شمسان قحطان القاسم', scores: { 'قرأن وعلومة': 32, 'تربية إسلامية': 0, 'لغة عربية': 45, 'لغة إنجليزية': 22, 'رياضيات': 50, 'كيمياء': 50, 'فيزياء': 50, 'احياء': 0 } },
+              { id: '3919', name: 'شهد عبدالله محمد الحكمي', scores: { 'قرأن وعلومة': 44, 'تربية إسلامية': 0, 'لغة عربية': 50, 'لغة إنجليزية': 30, 'رياضيات': 50, 'كيمياء': 50, 'فيزياء': 50, 'احياء': 48 } },
+              { id: '316', name: 'لمياء طارق شرف علي القليصي', scores: { 'قرأن وعلومة': 23, 'تربية إسلامية': 0, 'لغة عربية': 43, 'لغة إنجليزية': 16, 'رياضيات': 25, 'كيمياء': 42, 'فيزياء': 40, 'احياء': 36 } },
+              { id: '3467', name: 'ماريا فواز هادي صالح الجالدي', scores: { 'قرأن وعلومة': 25, 'تربية إسلامية': 19, 'لغة عربية': 40, 'لغة إنجليزية': 12, 'رياضيات': 25, 'كيمياء': 40, 'فيزياء': 42, 'احياء': 0 } },
+              { id: '1759', name: 'مرام طه عبدالرقيب الرجبي', scores: { 'قرأن وعلومة': 35, 'تربية إسلامية': 27, 'لغة عربية': 44, 'لغة إنجليزية': 19, 'رياضيات': 28, 'كيمياء': 46, 'فيزياء': 46, 'احياء': 42 } },
+              { id: '644', name: 'مرام ماجد احمد عبده الشبيبي', scores: { 'قرأن وعلومة': 29, 'تربية إسلامية': 0, 'لغة عربية': 43, 'لغة إنجليزية': 15, 'رياضيات': 25, 'كيمياء': 40, 'فيزياء': 38, 'احياء': 0 } },
+              { id: '300', name: 'ملاك احمد حسين العروسي', scores: { 'تربية إسلامية': 0, 'لغة إنجليزية': 13, 'رياضيات': 25, 'كيمياء': 42, 'فيزياء': 35, 'احياء': 0 } },
+              { id: '4231', name: 'ملاك صادق محمد عبده الشلفي', scores: { 'قرأن وعلومة': 29, 'تربية إسلامية': 36, 'لغة عربية': 45, 'لغة إنجليزية': 15, 'رياضيات': 30, 'كيمياء': 46, 'فيزياء': 40, 'احياء': 42 } },
+              { id: '298', name: 'ملاك يحيى علي صالح مخارش', scores: { 'قرأن وعلومة': 30, 'تربية إسلامية': 28, 'لغة عربية': 47, 'لغة إنجليزية': 16, 'رياضيات': 40, 'كيمياء': 48, 'فيزياء': 45, 'احياء': 0 } },
+              { id: '2628', name: 'ملاك يحيى محمد الهمداني', scores: { 'قرأن وعلومة': 16, 'تربية إسلامية': 22, 'لغة عربية': 40, 'لغة إنجليزية': 15, 'رياضيات': 25, 'كيمياء': 40, 'فيزياء': 35, 'احياء': 0 } },
+              { id: '1021', name: 'منار عمار احمد صالح القحطاني', scores: { 'قرأن وعلومة': 30, 'تربية إسلامية': 36, 'لغة عربية': 50, 'لغة إنجليزية': 25, 'رياضيات': 45, 'كيمياء': 50, 'فيزياء': 50, 'احياء': 0 } },
+              { id: '1343', name: 'ندى علي nacer علي الرحبي', scores: { 'قرأن وعلومة': 0, 'تربية إسلامية': 21, 'لغة عربية': 40, 'لغة إنجليزية': 12, 'رياضيات': 35, 'كيمياء': 42, 'فيزياء': 46, 'احياء': 48 } },
+              { id: '3728', name: 'نقية محمد شايف عبدالله العليمي', scores: { 'قرأن وعلومة': 21, 'تربية إسلامية': 0, 'لغة عربية': 42, 'لغة إنجليزية': 20, 'رياضيات': 25, 'كيمياء': 42, 'فيزياء': 48, 'احياء': 0 } },
+              { id: '297', name: 'نهى محمد منصور علي الشوافي', scores: { 'قرأن وعلومة': 40, 'تربية إسلامية': 41, 'لغة عربية': 50, 'لغة إنجليزية': 29, 'رياضيات': 50, 'كيمياء': 50, 'فيزياء': 50, 'احياء': 48 } },
+              { id: '4866', name: 'نور هشام علي حسين شرهان', scores: { 'قرأن وعلومة': 0, 'تربية إسلامية': 0, 'لغة عربية': 0, 'لغة إنجليزية': 12, 'رياضيات': 0, 'كيمياء': 0, 'فيزياء': 0, 'احياء': 0 } },
+              { id: '4564', name: 'نورا احمد عبدالله الجدري', scores: { 'قرأن وعلومة': 0, 'تربية إسلامية': 0, 'لغة عربية': 43, 'لغة إنجليزية': 12, 'رياضيات': 0, 'كيمياء': 0, 'فيزياء': 0, 'احياء': 0 } },
+              { id: '315', name: 'هبة ابراهيم علي احمد فاتق', scores: { 'قرأن وعلومة': 46, 'تربية إسلامية': 34, 'لغة عربية': 48, 'لغة إنجليزية': 20, 'رياضيات': 47, 'كيمياء': 50, 'فيزياء': 50, 'احياء': 0 } },
+              { id: '2695', name: 'ياسمين حمدي عبدالملك الشيباني', scores: { 'قرأن وعلومة': 48, 'تربية إسلامية': 33, 'لغة عربية': 46, 'لغة إنجليزية': 26, 'رياضيات': 45, 'كيمياء': 50, 'فيزياء': 50, 'احياء': 48 } }
+            ];
+
+            const mapped: StudentRecord[] = [];
+            sampleData.forEach(s => {
+              Object.entries(s.scores).forEach(([subject, score]) => {
+                const numScore = Number(score);
+                const maxScore = numScore > 50 ? 100 : 50;
+                mapped.push({
+                  student_id: s.id,
+                  student_name: s.name,
+                  grade_level: 1,
+                  class_section: 'أ',
+                  term: 'الأول',
+                  exam_type: 'نهائي',
+                  exam_date: new Date().toLocaleDateString(),
+                  subject_code: subject,
+                  subject_name: subject,
+                  score: numScore,
+                  max_score: maxScore,
+                  percentage: (numScore / maxScore) * 100,
+                  weight: 1,
+                  notes: '',
+                  gender: ''
+                });
+              });
+            });
+            setPreview(mapped);
+          }}
+          className="glass-card p-6 flex items-center justify-center gap-3 hover:bg-white/10 transition-all group"
+        >
+          <Sparkles className="w-6 h-6 text-blue-400 group-hover:scale-110 transition-transform" />
+          <div className="text-right">
+            <p className="font-bold">تحميل بيانات تجريبية</p>
+            <p className="text-xs text-slate-400">استخدم بيانات الـ 40 طالبة المرفقة كمثال</p>
+          </div>
+        </button>
+
+        <button 
+          onClick={downloadTemplate}
+          className="glass-card p-6 flex items-center justify-center gap-3 hover:bg-white/10 transition-all group"
+        >
+          <Download className="w-6 h-6 text-accent-purple group-hover:scale-110 transition-transform" />
+          <div className="text-right">
+            <p className="font-bold">تحميل القالب الموحد</p>
+            <p className="text-xs text-slate-400">تحميل ملف Excel فارغ لإدخال بياناتك</p>
+          </div>
+        </button>
+      </div>
+      <div 
+        {...getRootProps()} 
+        className={`glass-card p-12 border-dashed border-2 transition-all cursor-pointer flex flex-col items-center justify-center space-y-4 ${
+          isDragActive ? 'border-accent-purple bg-accent-purple/5' : 'border-white/10 hover:border-white/20'
+        }`}
+      >
+        <input {...getInputProps()} />
+        <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center">
+          <FileUp className={`w-10 h-10 ${isDragActive ? 'text-accent-purple' : 'text-slate-400'}`} />
+        </div>
+        <div className="text-center">
+          <p className="text-xl font-bold">اسحب الملف هنا أو اضغط للاختيار</p>
+          <p className="text-slate-400 mt-1">يدعم ملفات Excel (xlsx, xls) و CSV</p>
+        </div>
+      </div>
+
+      {error && (
+        <motion.div 
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400"
+        >
+          <AlertCircle className="w-6 h-6" />
+          <p>{error}</p>
+        </motion.div>
+      )}
+
+      {preview.length > 0 && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-6"
+        >
+          <div className="glass-card overflow-hidden">
+            <div className="p-4 border-b border-white/5 bg-white/5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="text-emerald-400 w-5 h-5" />
+                <span className="font-bold">معاينة البيانات ({preview.length} سجل)</span>
+              </div>
+              <button 
+                onClick={() => setPreview([])}
+                className="p-2 hover:bg-red-500/10 text-red-400 rounded-lg transition-colors"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-right">
+                <thead className="bg-white/5 text-slate-400 text-sm">
+                  <tr>
+                    <th className="p-4">رقم الطالب</th>
+                    <th className="p-4">اســـم الطالب</th>
+                    {groupedPreview.subjects.map(subject => (
+                      <th key={subject} className="p-4">{subject}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {groupedPreview.rows.map((row, i) => (
+                    <tr key={i} className="hover:bg-white/5 transition-colors">
+                      <td className="p-4 font-mono">{row.id}</td>
+                      <td className="p-4">{row.name}</td>
+                      {groupedPreview.subjects.map(subject => (
+                        <td key={subject} className="p-4 text-center">
+                          {row.scores[subject] !== undefined ? row.scores[subject] : '-'}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <button 
+            onClick={() => onDataLoaded(preview)}
+            className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold text-lg shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.01] active:scale-[0.99]"
+          >
+            تأكيد البيانات وبدء التحليل
+          </button>
+        </motion.div>
+      )}
+    </div>
+  );
+}
